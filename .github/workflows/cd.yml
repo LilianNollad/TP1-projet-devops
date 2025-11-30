@@ -27,8 +27,12 @@ jobs:
         id: get_version
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
+          # Créer une version compatible GCP (remplacer . par -)
+          VERSION_LABEL=$(echo $VERSION | tr '.' '-')
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION_LABEL=$VERSION_LABEL" >> $GITHUB_OUTPUT
           echo "📦 Version: $VERSION"
+          echo "📦 Version Label (GCP): $VERSION_LABEL"
 
       # 3. Connexion à Docker Hub
       - name: Login to Docker Hub
@@ -141,10 +145,18 @@ jobs:
       - name: Update Cloud Run service configuration
         run: |
           VERSION=${{ steps.get_version.outputs.VERSION }}
+          VERSION_LABEL=${{ steps.get_version.outputs.VERSION_LABEL }}
           echo "📝 Updating Cloud Run service configuration..."
 
-          # Remplacer les placeholders dans cloud-run-service.yaml
-          sed -i "s|VERSION_TAG|$VERSION|g" cloud-run-service.yaml
+          # Remplacer VERSION_TAG par VERSION (pour les images Docker)
+          sed -i "s|image: DOCKERHUB_USERNAME/crud-app:VERSION_TAG|image: ${{ secrets.DOCKERHUB_USERNAME }}/crud-app:$VERSION|g" cloud-run-service.yaml
+          sed -i "s|image: DOCKERHUB_USERNAME/crud-fluent-bit:VERSION_TAG|image: ${{ secrets.DOCKERHUB_USERNAME }}/crud-fluent-bit:$VERSION|g" cloud-run-service.yaml
+
+          # Remplacer VERSION_TAG dans les labels par VERSION_LABEL (compatible GCP)
+          sed -i "s|version: VERSION_TAG|version: $VERSION_LABEL|g" cloud-run-service.yaml
+          sed -i "s|value: \"VERSION_TAG\"|value: \"$VERSION\"|g" cloud-run-service.yaml
+
+          # Remplacer les autres placeholders
           sed -i "s|DOCKERHUB_USERNAME|${{ secrets.DOCKERHUB_USERNAME }}|g" cloud-run-service.yaml
           sed -i "s|GCP_PROJECT_ID|${{ secrets.GCP_PROJECT_ID }}|g" cloud-run-service.yaml
           sed -i "s|GCP_REGION|${{ secrets.GCP_REGION }}|g" cloud-run-service.yaml
