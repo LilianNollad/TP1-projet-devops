@@ -1,4 +1,4 @@
-# Dockerfile conforme aux exigences : Application Node.js + Nginx dans le même conteneur
+
 FROM node:18-alpine
 
 # Installer Nginx et les outils nécessaires
@@ -50,3 +50,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
 
 # Démarrer avec le script qui lance les deux services
 CMD ["/start.sh"]
+

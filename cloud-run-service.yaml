@@ -1,0 +1,76 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: crud-api
+  labels:
+    app: crud-api
+    version: VERSION_TAG
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: '1'
+        autoscaling.knative.dev/maxScale: '10'
+    spec:
+      containers:
+      # Container principal : Application CRUD
+      - name: crud-app
+        image: DOCKERHUB_USERNAME/crud-app:VERSION_TAG
+        ports:
+        - name: http1
+          containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3000"
+        - name: DB_HOST
+          value: "/cloudsql/GCP_PROJECT_ID:GCP_REGION:DB_INSTANCE_NAME"
+        - name: DB_USER
+          value: "DB_USER_VALUE"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-password
+              key: password
+        - name: DB_NAME
+          value: "DB_NAME_VALUE"
+        - name: APP_VERSION
+          value: "VERSION_TAG"
+        resources:
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: logs
+          mountPath: /var/logs/crud
+
+      # Container sidecar : Fluent Bit pour les logs
+      - name: fluent-bit
+        image: DOCKERHUB_USERNAME/crud-fluent-bit:VERSION_TAG
+        env:
+        - name: LOKI_HOST
+          value: "LOKI_URL_VALUE"
+        - name: LOKI_PORT
+          value: "3100"
+        - name: LOKI_JOB
+          value: "crud-api"
+        - name: LOKI_ENVIRONMENT
+          value: "production"
+        - name: LOKI_SOURCE
+          value: "cloud-run"
+        resources:
+          limits:
+            cpu: '0.5'
+            memory: 256Mi
+        volumeMounts:
+        - name: logs
+          mountPath: /var/logs/crud
+          readOnly: true
+
+      volumes:
+      - name: logs
+        emptyDir: {}
+
+      # Cloud SQL Proxy pour connexion sécurisée
+      serviceAccountName: cloud-run-sa@GCP_PROJECT_ID.iam.gserviceaccount.com

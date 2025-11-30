@@ -1,0 +1,23 @@
+# Dockerfile pour le service de migration de base de données
+FROM node:18-alpine
+
+# Créer le répertoire de travail
+WORKDIR /app
+
+# Copier les fichiers package*.json
+COPY package*.json ./
+
+# Installer uniquement mysql2 (pas besoin de toutes les dépendances)
+RUN npm install --production --no-optional mysql2 && npm cache clean --force
+
+# Copier le script de migration
+COPY migrate.js ./
+
+# Définir les variables d'environnement par défaut
+ENV DB_HOST=db
+ENV DB_USER=root
+ENV DB_PASSWORD=rootpassword
+ENV DB_NAME=crud_app
+
+# Commande pour exécuter les migrations
+CMD ["node", "migrate.js"]

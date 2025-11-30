@@ -22,6 +22,25 @@ services:
       timeout: 10s
       retries: 3
 
+  # Service de migration de base de données
+  migration:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    container_name: crud_migration
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-crud_app}
+      DB_USER: ${DB_USER:-crud_user}
+      DB_PASSWORD: ${DB_PASSWORD:-crud_password}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - crud_network
+    restart: "no"
+
   # Application Node.js + Nginx (dans le même conteneur comme demandé)
   app:
     build:
@@ -46,6 +65,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
     networks:
       - crud_network
     healthcheck:
@@ -54,6 +75,26 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+
+  # Service Fluent Bit pour envoyer les logs vers Loki sur GCP
+  fluent-bit:
+    image: fluent/fluent-bit:2.2
+    container_name: crud_fluent_bit
+    restart: unless-stopped
+    volumes:
+      - app_logs:/var/logs/crud:ro
+      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./parsers.conf:/fluent-bit/etc/parsers.conf:ro
+    environment:
+      - LOKI_HOST=${LOKI_HOST}
+      - LOKI_PORT=${LOKI_PORT:-3100}
+      - LOKI_JOB=${LOKI_JOB:-crud-api}
+      - LOKI_ENVIRONMENT=${LOKI_ENVIRONMENT:-production}
+      - LOKI_SOURCE=${LOKI_SOURCE:-local-docker}
+    depends_on:
+      - app
+    networks:
+      - crud_network
 
 volumes:
   db_data:

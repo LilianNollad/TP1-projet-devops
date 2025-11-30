@@ -1,0 +1,12 @@
+# Dockerfile pour Fluent Bit avec configuration personnalisée
+FROM fluent/fluent-bit:2.2
+
+# Copier la configuration personnalisée
+COPY fluent-bit.conf /fluent-bit/etc/fluent-bit.conf
+COPY parsers.conf /fluent-bit/etc/parsers.conf
+
+# Exposer le port pour les métriques (optionnel)
+EXPOSE 2020
+
+# La commande par défaut est déjà définie dans l'image de base
+CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]

@@ -1,0 +1,246 @@
+name: CD - Build & Deploy to Cloud Run
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Déclenchement sur les tags version (ex: v1.0.0)
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DB_INSTANCE_NAME: ${{ secrets.DB_INSTANCE_NAME }}
+  DB_CONNECTION_NAME: ${{ secrets.DB_CONNECTION_NAME }}
+
+jobs:
+  build-and-deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Récupération du code source
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Extraction de la version depuis le tag Git
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION"
+
+      # 3. Connexion à Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 4. Build et push de l'image CRUD API
+      - name: Build and push CRUD API image
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          echo "🏗️  Building CRUD API image..."
+
+          docker build \
+            -t ${{ secrets.DOCKERHUB_USERNAME }}/crud-app:$VERSION \
+            -t ${{ secrets.DOCKERHUB_USERNAME }}/crud-app:latest \
+            -f Dockerfile \
+            .
+
+          echo "📤 Pushing CRUD API image..."
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/crud-app:$VERSION
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/crud-app:latest
+
+          echo "✅ CRUD API image pushed successfully"
+
+      # 5. Build et push de l'image Fluent Bit
+      - name: Build and push Fluent Bit image
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          echo "🏗️  Building Fluent Bit image..."
+
+          docker build \
+            -t ${{ secrets.DOCKERHUB_USERNAME }}/crud-fluent-bit:$VERSION \
+            -t ${{ secrets.DOCKERHUB_USERNAME }}/crud-fluent-bit:latest \
+            -f Dockerfile.fluent-bit \
+            .
+
+          echo "📤 Pushing Fluent Bit image..."
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/crud-fluent-bit:$VERSION
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/crud-fluent-bit:latest
+
+          echo "✅ Fluent Bit image pushed successfully"
+
+      # 6. Configuration du SDK Google Cloud
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          export_default_credentials: true
+
+      # 7. Authentification avec Artifact Registry / GCR (optionnel)
+      - name: Configure Docker for GCP
+        run: |
+          gcloud auth configure-docker
+
+      # 8. Build de l'image de migration
+      - name: Build migration image
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          echo "🏗️  Building migration image..."
+
+          docker build \
+            -t ${{ secrets.DOCKERHUB_USERNAME }}/crud-migration:$VERSION \
+            -f Dockerfile.migrate \
+            .
+
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/crud-migration:$VERSION
+
+          echo "✅ Migration image built and pushed"
+
+      # 9. Exécution des migrations via Cloud SQL Proxy
+      - name: Run database migrations
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          echo "🔄 Running database migrations..."
+
+          # Télécharger Cloud SQL Proxy
+          wget https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64 -O cloud_sql_proxy
+          chmod +x cloud_sql_proxy
+
+          # Démarrer Cloud SQL Proxy en arrière-plan
+          ./cloud_sql_proxy -instances=${{ secrets.DB_CONNECTION_NAME }}=tcp:3306 &
+          PROXY_PID=$!
+
+          # Attendre que le proxy soit prêt
+          sleep 10
+
+          # Exécuter les migrations via Docker
+          docker run --rm \
+            --network host \
+            -e DB_HOST=127.0.0.1 \
+            -e DB_PORT=3306 \
+            -e DB_USER=${{ secrets.DB_USER }} \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e DB_NAME=${{ secrets.DB_NAME }} \
+            ${{ secrets.DOCKERHUB_USERNAME }}/crud-migration:$VERSION
+
+          # Arrêter Cloud SQL Proxy
+          kill $PROXY_PID
+
+          echo "✅ Migrations executed successfully"
+
+      # 10. Mise à jour du fichier Cloud Run avec les valeurs réelles
+      - name: Update Cloud Run service configuration
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          echo "📝 Updating Cloud Run service configuration..."
+
+          # Remplacer les placeholders dans cloud-run-service.yaml
+          sed -i "s|VERSION_TAG|$VERSION|g" cloud-run-service.yaml
+          sed -i "s|DOCKERHUB_USERNAME|${{ secrets.DOCKERHUB_USERNAME }}|g" cloud-run-service.yaml
+          sed -i "s|GCP_PROJECT_ID|${{ secrets.GCP_PROJECT_ID }}|g" cloud-run-service.yaml
+          sed -i "s|GCP_REGION|${{ secrets.GCP_REGION }}|g" cloud-run-service.yaml
+          sed -i "s|DB_INSTANCE_NAME|${{ secrets.DB_INSTANCE_NAME }}|g" cloud-run-service.yaml
+          sed -i "s|DB_USER_VALUE|${{ secrets.DB_USER }}|g" cloud-run-service.yaml
+          sed -i "s|DB_NAME_VALUE|${{ secrets.DB_NAME }}|g" cloud-run-service.yaml
+          sed -i "s|LOKI_URL_VALUE|${{ secrets.LOKI_URL }}|g" cloud-run-service.yaml
+
+          cat cloud-run-service.yaml
+
+          echo "✅ Cloud Run configuration updated"
+
+      # 11. Créer le secret DB password dans Cloud Run (si pas déjà existant)
+      - name: Create Cloud Run secrets
+        run: |
+          echo "🔐 Creating/updating Cloud Run secrets..."
+
+          # Créer le secret pour le mot de passe DB (ignore si existe déjà)
+          echo -n "${{ secrets.DB_PASSWORD }}" | gcloud secrets create db-password \
+            --data-file=- \
+            --replication-policy="automatic" 2>/dev/null || \
+          echo -n "${{ secrets.DB_PASSWORD }}" | gcloud secrets versions add db-password \
+            --data-file=-
+
+          echo "✅ Secrets created/updated"
+
+      # 12. Déploiement sur Cloud Run
+      - name: Deploy to Cloud Run
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          echo "🚀 Deploying to Cloud Run..."
+
+          gcloud run services replace cloud-run-service.yaml \
+            --region=${{ secrets.GCP_REGION }} \
+            --platform=managed
+
+          # Autoriser le trafic public (optionnel)
+          gcloud run services add-iam-policy-binding crud-api \
+            --region=${{ secrets.GCP_REGION }} \
+            --member="allUsers" \
+            --role="roles/run.invoker"
+
+          # Obtenir l'URL du service
+          SERVICE_URL=$(gcloud run services describe crud-api \
+            --region=${{ secrets.GCP_REGION }} \
+            --format='value(status.url)')
+
+          echo "✅ Deployment successful!"
+          echo "🌐 Service URL: $SERVICE_URL"
+          echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_OUTPUT
+
+      # 13. Test de santé du service déployé
+      - name: Health check
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          SERVICE_URL=$(gcloud run services describe crud-api \
+            --region=${{ secrets.GCP_REGION }} \
+            --format='value(status.url)')
+
+          echo "🏥 Running health check..."
+
+          # Attendre quelques secondes que le service démarre
+          sleep 15
+
+          # Test du endpoint /health
+          HEALTH_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" $SERVICE_URL/health)
+
+          if [ "$HEALTH_RESPONSE" -eq 200 ]; then
+            echo "✅ Health check passed (HTTP $HEALTH_RESPONSE)"
+          else
+            echo "❌ Health check failed (HTTP $HEALTH_RESPONSE)"
+            exit 1
+          fi
+
+      # 14. Notification de succès (optionnel - Discord)
+      - name: Notify deployment success
+        if: success()
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          SERVICE_URL=$(gcloud run services describe crud-api \
+            --region=${{ secrets.GCP_REGION }} \
+            --format='value(status.url)')
+
+          echo "🎉 Deployment completed successfully!"
+          echo "Version: $VERSION"
+          echo "URL: $SERVICE_URL"
+
+          # Si vous avez un webhook Discord, décommentez :
+          # curl -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
+          #   -H "Content-Type: application/json" \
+          #   -d "{\"content\":\"🚀 Déploiement réussi de la version $VERSION sur Cloud Run: $SERVICE_URL\"}"
+
+      # 15. Notification d'échec
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          echo "❌ Deployment failed for version $VERSION"
+
+          # Si vous avez un webhook Discord, décommentez :
+          # curl -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
+          #   -H "Content-Type: application/json" \
+          #   -d "{\"content\":\"❌ Échec du déploiement de la version $VERSION\"}"
