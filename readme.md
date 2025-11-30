@@ -442,21 +442,6 @@ curl https://VOTRE-URL.run.app/health
 curl https://VOTRE-URL.run.app/api/users
 ```
 
-## Documentation technique
-
-### Guides disponibles
-
-- **[README-CD.md](README-CD.md)** : Guide complet du pipeline CD et configuration GCP
-- **[GITHUB-SECRETS-SETUP.md](GITHUB-SECRETS-SETUP.md)** : Configuration détaillée des secrets GitHub
-- **[SECRETS-TO-COPY.md](SECRETS-TO-COPY.md)** : Valeurs exactes des secrets à copier-coller
-- **[VERIFICATION-GUIDE.md](VERIFICATION-GUIDE.md)** : Procédures de vérification avant déploiement
-
-### Scripts utiles
-
-- `get-secrets-values.sh` : Récupère automatiquement les valeurs des secrets GCP
-- `verify-before-deploy.sh` : Vérification syntaxique et structurelle
-- `test-local.sh` : Tests d'intégration complets avec Docker
-
 ## Technologies utilisées
 
 **Backend** :
@@ -497,54 +482,4 @@ Cette application implémente un pipeline complet de déploiement continu :
 - Configuration externalisée via variables d'environnement
 - Logs structurés JSON pour observabilité
 - Architecture stateless facilitant le scaling horizontal
-
-## Troubleshooting
-
-### Problèmes locaux (Docker Compose)
-
-En cas de problème en local :
-
-1. Vérifier les logs des conteneurs : `docker-compose logs -f`
-2. Tester le health check : `curl http://localhost:8080/health`
-3. Vérifier la configuration dans le fichier `.env`
-4. S'assurer que le port 8080 n'est pas déjà utilisé
-5. Vérifier l'espace disque disponible pour les volumes Docker
-6. Attendre que la base de données soit complètement initialisée (healthcheck)
-7. Vérifier que les migrations se sont exécutées : `docker logs crud_migration`
-
-### Problèmes de déploiement
-
-**GitHub Actions échoue** :
-- Vérifier que tous les 12 secrets sont configurés
-- Consulter les logs dans l'onglet Actions sur GitHub
-- Vérifier les permissions du service account GCP
-
-**Migrations échouent** :
-```bash
-# Tester la connexion Cloud SQL
-gcloud sql connect mon-instance-mysql --user=crud_user
-
-# Vérifier l'instance existe
-gcloud sql instances list
-```
-
-**Cloud Run ne démarre pas** :
-```bash
-# Consulter les logs Cloud Run
-gcloud run services logs read crud-api \
-  --region=europe-west1 \
-  --limit=50
-```
-
-**Logs n'arrivent pas dans Loki** :
-```bash
-# Vérifier logs Fluent Bit dans Cloud Run
-gcloud run services logs read crud-api \
-  --region=europe-west1 \
-  --container=fluent-bit
-
-# Tester connectivité Loki
-curl http://IP_LOKI:3100/ready
-```
-
 
