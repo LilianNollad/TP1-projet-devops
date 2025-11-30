@@ -119,24 +119,39 @@ jobs:
           ./cloud_sql_proxy -instances=${{ secrets.DB_CONNECTION_NAME }}=tcp:3306 &
           PROXY_PID=$!
 
-          # Attendre que le proxy soit prêt
-          sleep 10
+          echo "⏳ Waiting for Cloud SQL Proxy to be ready..."
+          for i in {1..15}; do
+            nc -z 127.0.0.1 3306 && break
+          sleep 2
+          done
 
-          # Exécuter les migrations via Docker
-          docker run --rm \
-            --network host \
+          if ! nc -z 127.0.0.1 3306; then
+            echo "❌ Cloud SQL Proxy failed to start"
+            kill $PROXY_PID
+            exit 1
+          fi
+          echo "🏃‍♂️ Executing migrations..."
+          RETRIES=5
+          for i in $(seq 1 $RETRIES); do
+            docker run --rm \
             -e DB_HOST=127.0.0.1 \
             -e DB_PORT=3306 \
             -e DB_USER=${{ secrets.DB_USER }} \
             -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
             -e DB_NAME=${{ secrets.DB_NAME }} \
-            ${{ secrets.DOCKERHUB_USERNAME }}/crud-migration:$VERSION
+           ${{ secrets.DOCKERHUB_USERNAME }}/crud-migration:$VERSION && break
 
-          # Arrêter Cloud SQL Proxy
+          echo "⚠️ Migration attempt $i failed, retrying in 5s..."
+          sleep 5
+
+          if [ "$i" -eq "$RETRIES" ]; then
+            echo "❌ All migration attempts failed"
+            kill $PROXY_PID
+            exit 1
+          fi
+          done
           kill $PROXY_PID
-
           echo "✅ Migrations executed successfully"
-
       # 11. Mise à jour du fichier Cloud Run avec les valeurs réelles
       - name: Update Cloud Run service configuration
         run: |
