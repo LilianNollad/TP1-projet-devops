@@ -73,20 +73,24 @@ jobs:
 
           echo "✅ Fluent Bit image pushed successfully"
 
-      # 6. Configuration du SDK Google Cloud
+      # 6. Authentification avec Google Cloud
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # 7. Configuration du SDK Google Cloud
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
           project_id: ${{ secrets.GCP_PROJECT_ID }}
-          export_default_credentials: true
 
-      # 7. Authentification avec Artifact Registry / GCR (optionnel)
+      # 8. Authentification avec Artifact Registry / GCR (optionnel)
       - name: Configure Docker for GCP
         run: |
           gcloud auth configure-docker
 
-      # 8. Build de l'image de migration
+      # 9. Build de l'image de migration
       - name: Build migration image
         run: |
           VERSION=${{ steps.get_version.outputs.VERSION }}
@@ -101,7 +105,7 @@ jobs:
 
           echo "✅ Migration image built and pushed"
 
-      # 9. Exécution des migrations via Cloud SQL Proxy
+      # 10. Exécution des migrations via Cloud SQL Proxy
       - name: Run database migrations
         run: |
           VERSION=${{ steps.get_version.outputs.VERSION }}
@@ -133,7 +137,7 @@ jobs:
 
           echo "✅ Migrations executed successfully"
 
-      # 10. Mise à jour du fichier Cloud Run avec les valeurs réelles
+      # 11. Mise à jour du fichier Cloud Run avec les valeurs réelles
       - name: Update Cloud Run service configuration
         run: |
           VERSION=${{ steps.get_version.outputs.VERSION }}
@@ -153,7 +157,7 @@ jobs:
 
           echo "✅ Cloud Run configuration updated"
 
-      # 11. Créer le secret DB password dans Cloud Run (si pas déjà existant)
+      # 12. Créer le secret DB password dans Cloud Run (si pas déjà existant)
       - name: Create Cloud Run secrets
         run: |
           echo "🔐 Creating/updating Cloud Run secrets..."
@@ -167,7 +171,7 @@ jobs:
 
           echo "✅ Secrets created/updated"
 
-      # 12. Déploiement sur Cloud Run
+      # 13. Déploiement sur Cloud Run
       - name: Deploy to Cloud Run
         run: |
           VERSION=${{ steps.get_version.outputs.VERSION }}
@@ -192,7 +196,7 @@ jobs:
           echo "🌐 Service URL: $SERVICE_URL"
           echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_OUTPUT
 
-      # 13. Test de santé du service déployé
+      # 14. Test de santé du service déployé
       - name: Health check
         run: |
           VERSION=${{ steps.get_version.outputs.VERSION }}
@@ -215,7 +219,7 @@ jobs:
             exit 1
           fi
 
-      # 14. Notification de succès (optionnel - Discord)
+      # 15. Notification de succès (optionnel - Discord)
       - name: Notify deployment success
         if: success()
         run: |
@@ -233,7 +237,7 @@ jobs:
           #   -H "Content-Type: application/json" \
           #   -d "{\"content\":\"🚀 Déploiement réussi de la version $VERSION sur Cloud Run: $SERVICE_URL\"}"
 
-      # 15. Notification d'échec
+      # 16. Notification d'échec
       - name: Notify deployment failure
         if: failure()
         run: |
