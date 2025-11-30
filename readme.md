@@ -336,9 +336,6 @@ curl http://localhost/health
 2. **Compte Docker Hub**
    - Username et Access Token configurés
 
-3. **Repository GitHub**
-   - Fork ou clone du projet
-   - Secrets configurés (voir [GITHUB-SECRETS-SETUP.md](GITHUB-SECRETS-SETUP.md))
 
 ### Configuration des secrets GitHub
 
@@ -352,7 +349,6 @@ DB_USER, DB_PASSWORD, DB_NAME
 LOKI_URL, DISCORD_WEBHOOK_URL (optionnel)
 ```
 
-Voir le guide détaillé : [SECRETS-TO-COPY.md](SECRETS-TO-COPY.md)
 
 ### Déploiement automatique
 
@@ -372,20 +368,6 @@ Le workflow GitHub Actions exécute automatiquement :
 3. Exécution des migrations sur Cloud SQL
 4. Déploiement multi-container sur Cloud Run
 5. Health check de validation
-
-### Vérification avant déploiement
-
-Avant de pousser sur GitHub, vérifier localement :
-
-```bash
-# Vérification automatique des fichiers et configuration
-bash verify-before-deploy.sh
-
-# Tests d'intégration complets avec Docker
-bash test-local.sh
-```
-
-Guide complet : [VERIFICATION-GUIDE.md](VERIFICATION-GUIDE.md)
 
 ## Monitoring et observabilité
 
@@ -566,5 +548,3 @@ curl http://IP_LOKI:3100/ready
 ```
 
 
-**TP DevOps CI/CD - Master 1 CCM**
-**Année universitaire 2024-2025**
