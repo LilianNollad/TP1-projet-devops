@@ -5,14 +5,13 @@ metadata:
   labels:
     app: crud-api
     version: VERSION_TAG
-  annotations:
-    run.googleapis.com/cloudsql-instances: GCP_PROJECT_ID:GCP_REGION:DB_INSTANCE_NAME
 spec:
   template:
     metadata:
       annotations:
         autoscaling.knative.dev/minScale: '1'
         autoscaling.knative.dev/maxScale: '10'
+        run.googleapis.com/cloudsql-instances: GCP_PROJECT_ID:GCP_REGION:DB_INSTANCE_NAME
     spec:
       containers:
       # Container principal : Application CRUD
