@@ -5,6 +5,8 @@ metadata:
   labels:
     app: crud-api
     version: VERSION_TAG
+  annotations:
+    run.googleapis.com/cloudsql-instances: GCP_PROJECT_ID:GCP_REGION:DB_INSTANCE_NAME
 spec:
   template:
     metadata:
