@@ -1,19 +1,28 @@
 const mysql = require('mysql2/promise');
 
 // Configuration de la base de données depuis les variables d'environnement
+const dbHost = process.env.DB_HOST || 'db';
 const dbConfig = {
-	host: process.env.DB_HOST || 'db',
 	user: process.env.DB_USER || 'root',
 	password: process.env.DB_PASSWORD || 'rootpassword',
 	database: process.env.DB_NAME || 'crud_app'
 };
+
+// Si DB_HOST commence par /cloudsql/, utiliser socketPath au lieu de host
+if (dbHost.startsWith('/cloudsql/')) {
+	dbConfig.socketPath = dbHost;
+} else {
+	dbConfig.host = dbHost;
+	dbConfig.port = process.env.DB_PORT || 3306;
+}
 
 async function runMigrations() {
 	let connection;
 
 	try {
 		console.log('🚀 Démarrage des migrations de base de données...');
-		console.log(`📍 Connexion à ${dbConfig.host}/${dbConfig.database}`);
+		const connectionInfo = dbConfig.socketPath ? dbConfig.socketPath : `${dbConfig.host}:${dbConfig.port}`;
+		console.log(`📍 Connexion à ${connectionInfo}/${dbConfig.database}`);
 
 		// Créer une connexion
 		connection = await mysql.createConnection(dbConfig);

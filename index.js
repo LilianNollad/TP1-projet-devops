@@ -9,12 +9,21 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+// Configuration DB : support à la fois TCP et Unix socket
+const dbHost = process.env.DB_HOST || 'db';
 const dbConfig = {
-	host: process.env.DB_HOST || 'db',
 	user: process.env.DB_USER || 'root',
 	password: process.env.DB_PASSWORD || 'rootpassword',
 	database: process.env.DB_NAME || 'crud_app'
 };
+
+// Si DB_HOST commence par /cloudsql/, utiliser socketPath au lieu de host
+if (dbHost.startsWith('/cloudsql/')) {
+	dbConfig.socketPath = dbHost;
+} else {
+	dbConfig.host = dbHost;
+	dbConfig.port = process.env.DB_PORT || 3306;
+}
 
 const LOG_DIR = '/var/logs/crud';
 const APP_LOG_FILE = path.join(LOG_DIR, 'app.log');
